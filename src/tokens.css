@@ -1,0 +1,56 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   GoldRush Demos — Shared Design Tokens (Muted Brutalist Theme)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+    --bg: #1a1a1a;
+    --bg-deep: #111111;
+    --bg-panel: #1e1e1e;
+    --surface: #222222;
+    --fg: #f2f2f2;
+    --fg-muted: #888888;
+    --border: #444444;
+    --border-light: #333333;
+    --accent: #00d084;
+    --accent-dim: rgba(0, 208, 132, 0.15);
+    --destructive: #e74c3c;
+    --destructive-dim: rgba(231, 76, 60, 0.15);
+
+    /* State: gain / loss */
+    --gain: #22c55e;
+    --gain-dim: rgba(34, 197, 94, 0.15);
+    --loss: #ef4444;
+    --loss-dim: rgba(239, 68, 68, 0.15);
+
+    /* State: warning */
+    --warning: #f59e0b;
+    --warning-dim: rgba(245, 158, 11, 0.15);
+
+    /* Whale type palette */
+    --whale-transfer: #3b82f6;
+    --whale-transfer-dim: rgba(59, 130, 246, 0.15);
+    --whale-swap: #a855f7;
+    --whale-swap-fg: #c084fc;
+    --whale-swap-dim: rgba(168, 85, 247, 0.15);
+    --whale-swap-glow: rgba(168, 85, 247, 0.3);
+    --whale-bridge: var(--warning);
+    --whale-approve: #6b7280;
+
+    --shadow: 4px 4px 0px #000000;
+    --shadow-sm: 2px 2px 0px #000000;
+    --font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-mono);
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}

@@ -1,0 +1,26 @@
+{
+    "name": "defitaxes",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite --port 5174",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "devDependencies": {
+        "@types/node": "^25.2.3",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "@vitejs/plugin-react": "^4.5.0",
+        "typescript": "^5.8.3",
+        "vite": "^7.2.4"
+    },
+    "dependencies": {
+        "@covalenthq/client-sdk": "^2.2.1",
+        "ethers": "^6.16.0",
+        "lucide-react": "^0.563.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+    }
+}
