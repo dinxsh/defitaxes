@@ -4,19 +4,28 @@ import { formatAmount, formatDateIrs, toCsv, downloadFile } from "./utils";
 
 /** Shared row builder for Form 8949 — includes IRS Box, Adjustment Code, Adjustment Amount */
 function taxEventToRow(e: TaxEvent, box: "C" | "F"): string[] {
-    const adjCode = e.washSale ? "W" : "";
-    const adjAmount = e.washSale ? Math.abs(e.gainLoss).toFixed(2) : "";
+    // Wash-sale losses are NOT auto-disallowed: under current US law crypto is property,
+    // not a security, so IRC §1091 does not apply and the loss remains deductible. We surface
+    // the detection as an advisory note rather than emitting a "W" adjustment code (which would
+    // forfeit a legitimately deductible loss on the filed return). A filer who concludes the
+    // rule applies to their situation can add the W code manually.
+    const notes = [
+        e.costBasis === 0 && e.proceeds > 0 ? "Missing Price" : "",
+        e.washSale ? "Possible wash sale (advisory)" : "",
+    ]
+        .filter(Boolean)
+        .join("; ");
     return [
         e.description,
         formatDateIrs(e.dateAcquired),
         formatDateIrs(e.dateSold),
         e.proceeds.toFixed(2),
         e.costBasis.toFixed(2),
-        adjCode,
-        adjAmount,
+        "",
+        "",
         e.gainLoss.toFixed(2),
         box,
-        e.costBasis === 0 && e.proceeds > 0 ? "Missing Price" : "",
+        notes,
     ];
 }
 
@@ -61,18 +70,27 @@ export function exportScheduleD(report: TaxReport, filename = "schedule-d-summar
 
     const headers = ["Section", "Line", "Description", "Proceeds", "Cost Basis", "Gain or (Loss)"];
     const rows: string[][] = [
-        // Part I — Short-Term
+        // Part I — Short-Term. This tool generates Form 8949 with Box C checked
+        // (short-term, basis NOT reported to the IRS), so the totals flow to line 3,
+        // not line 1a (which is reserved for 1099-B basis-reported transactions).
         [
             "Part I",
             "1a",
-            "Totals for all short-term transactions reported on Form 1099-B",
+            "Totals for short-term transactions reported on Form 1099-B with basis reported to IRS (no adjustments)",
+            "",
+            "",
+            "",
+        ],
+        ["Part I", "1b", "Totals for short-term transactions reported on Form 8949 with Box A checked", "", "", ""],
+        ["Part I", "2", "Totals for short-term transactions reported on Form 8949 with Box B checked", "", "", ""],
+        [
+            "Part I",
+            "3",
+            "Totals for short-term transactions reported on Form 8949 with Box C checked (basis not reported to IRS)",
             stProceeds.toFixed(2),
             stBasis.toFixed(2),
             report.totalShortTermGain.toFixed(2),
         ],
-        ["Part I", "1b", "Totals for all transactions where basis was NOT reported to IRS", "", "", ""],
-        ["Part I", "2", "Totals for all short-term transactions reported on Form 1099-B (basis reported)", "", "", ""],
-        ["Part I", "3", "Short-term gain from Form 6252", "", "", ""],
         [
             "Part I",
             "7",
@@ -81,17 +99,25 @@ export function exportScheduleD(report: TaxReport, filename = "schedule-d-summar
             stBasis.toFixed(2),
             report.totalShortTermGain.toFixed(2),
         ],
-        // Part II — Long-Term
+        // Part II — Long-Term. Box F (long-term, basis NOT reported) totals flow to line 10.
         [
             "Part II",
             "8a",
-            "Totals for all long-term transactions reported on Form 1099-B",
+            "Totals for long-term transactions reported on Form 1099-B with basis reported to IRS (no adjustments)",
+            "",
+            "",
+            "",
+        ],
+        ["Part II", "8b", "Totals for long-term transactions reported on Form 8949 with Box D checked", "", "", ""],
+        ["Part II", "9", "Totals for long-term transactions reported on Form 8949 with Box E checked", "", "", ""],
+        [
+            "Part II",
+            "10",
+            "Totals for long-term transactions reported on Form 8949 with Box F checked (basis not reported to IRS)",
             ltProceeds.toFixed(2),
             ltBasis.toFixed(2),
             report.totalLongTermGain.toFixed(2),
         ],
-        ["Part II", "8b", "Totals for all transactions where basis was NOT reported to IRS", "", "", ""],
-        ["Part II", "9", "Long-term gain from installment sales", "", "", ""],
         [
             "Part II",
             "15",
@@ -174,7 +200,9 @@ export function exportTransactions(transactions: Transaction[], filename = "tran
             tx.counterpartyLabel ?? tx.counterparty,
             tx.gasFeesUsd.toFixed(2),
             transferStr,
-            tx.transfers.some((t) => t.rate === 0 && t.amount > 0) ? "YES" : "",
+            // Match the report's zeroRateTransferCount filter: only flag transfers that
+            // actually affect the tax calc (exclude ignore-treated, which have no impact).
+            tx.transfers.some((t) => t.rate === 0 && t.amount > 0 && t.treatment !== "ignore") ? "YES" : "",
         ];
     });
 

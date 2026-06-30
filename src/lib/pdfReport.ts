@@ -1,5 +1,5 @@
 import type { CostBasisMethod, IncomeEvent, TaxEvent, TaxReport } from "./types";
-import { formatDateIrs } from "./utils";
+import { formatAmount, formatDateIrs } from "./utils";
 
 function fmt(value: number, currency: string): string {
     try {
@@ -41,9 +41,9 @@ function incomeRows(events: IncomeEvent[], currency: string): string {
         .map(
             (e) => `
         <tr>
-            <td>${e.date.toLocaleDateString()}</td>
+            <td>${formatDateIrs(e.date)}</td>
             <td>${e.description}</td>
-            <td class="num">${e.amount.toLocaleString()}</td>
+            <td class="num">${formatAmount(e.amount)}</td>
             <td class="num gain">${fmt(e.fairMarketValueUsd, currency)}</td>
         </tr>`
         )
@@ -192,9 +192,9 @@ export function openPdfReport(report: TaxReport, method: CostBasisMethod, taxYea
     <div class="summary-value loss">${fmt(report.totalFees, report.currency)}</div>
   </div>
   <div class="summary-card">
-    <div class="summary-label">Wash Sales Detected</div>
+    <div class="summary-label">Wash Sales Flagged</div>
     <div class="summary-value">${report.washSaleCount}</div>
-    <div class="summary-count">${fmt(report.washSaleDisallowedLoss, report.currency)} disallowed</div>
+    <div class="summary-count">${fmt(report.washSaleDisallowedLoss, report.currency)} flagged (advisory)</div>
   </div>
   <div class="summary-card">
     <div class="summary-label">Unknown Basis Events</div>
@@ -210,7 +210,7 @@ export function openPdfReport(report: TaxReport, method: CostBasisMethod, taxYea
 ${
     report.washSaleCount > 0 || report.unknownBasisCount > 0 || report.zeroRateTransferCount > 0
         ? `<div class="warnings">
-  ${report.washSaleCount > 0 ? `<div class="warning-item">⚠ ${report.washSaleCount} potential wash sale(s) — ${fmt(report.washSaleDisallowedLoss, report.currency)} in losses may be disallowed under IRC §1091.</div>` : ""}
+  ${report.washSaleCount > 0 ? `<div class="warning-item">⚠ ${report.washSaleCount} potential wash sale(s) flagged — ${fmt(report.washSaleDisallowedLoss, report.currency)} in losses. Advisory only: crypto is generally not subject to IRC §1091 under current US law, so these losses remain deductible.</div>` : ""}
   ${report.unknownBasisCount > 0 && report.unknownBasisValueAtRisk >= 0.01 ? `<div class="warning-item">⚠ ${report.unknownBasisCount} event(s) with unknown cost basis — ${fmt(report.unknownBasisValueAtRisk, report.currency)} proceeds may be over-reported.</div>` : ""}
   ${report.zeroRateTransferCount > 0 ? `<div class="warning-item">⚠ ${report.zeroRateTransferCount} transfer(s) with missing price data — cost basis may be understated.</div>` : ""}
 </div>`

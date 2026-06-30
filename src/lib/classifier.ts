@@ -1,7 +1,6 @@
 import { CATEGORY_TREATMENTS } from "./categories";
 import { getWrappedNativeAddress } from "./chains";
 import { getProtocolInfo } from "./protocols";
-import { isStablecoin } from "./stablecoins";
 import type { Category, Transfer, Transaction, Treatment } from "./types";
 import { isZeroAddress, normalizeAddress } from "./utils";
 
@@ -92,23 +91,32 @@ const LENDING_PROTOCOL_ADDRESSES = new Set([
     "0x24179cd81c9e782a4096035f7ec97fb8b783e007", // Liquity: BorrowerOperations
 ]);
 
-/** Classify a transaction based on its transfers */
+/**
+ * Classify a transaction based on its transfers.
+ * @param ownedAddresses One or more wallet addresses owned by the user. In multi-wallet
+ *   mode pass all of them so that transfers BETWEEN the user's own wallets bucket as SELF
+ *   (a non-taxable internal move) rather than as a phantom disposal + re-acquisition.
+ */
 export function classifyTransaction(
     tx: Transaction,
-    walletAddress: string
+    ownedAddresses: string | Iterable<string>
 ): { category: Category; transfers: Transfer[] } {
-    const wallet = normalizeAddress(walletAddress);
+    const owned =
+        typeof ownedAddresses === "string"
+            ? new Set([normalizeAddress(ownedAddresses)])
+            : new Set([...ownedAddresses].map(normalizeAddress));
     const transfers = tx.transfers.map((t) => ({ ...t }));
 
-    // Bucket each transfer
+    // Bucket each transfer relative to the set of owned wallets
     for (const t of transfers) {
-        const fromMe = normalizeAddress(t.from) === wallet;
-        const toMe = normalizeAddress(t.to) === wallet;
+        const fromMe = owned.has(normalizeAddress(t.from));
+        const toMe = owned.has(normalizeAddress(t.to));
         if (isZeroAddress(t.to)) {
             t.bucket = "BURNED";
         } else if (isZeroAddress(t.from)) {
             t.bucket = "MINTED";
         } else if (fromMe && toMe) {
+            // Either a self-transfer or a move between two of the user's own wallets.
             t.bucket = "SELF";
         } else if (fromMe) {
             t.bucket = "SENT";
@@ -119,8 +127,10 @@ export function classifyTransaction(
         }
     }
 
-    // Filter to only transfers involving the wallet
-    const relevant = transfers.filter((t) => normalizeAddress(t.from) === wallet || normalizeAddress(t.to) === wallet);
+    // Filter to only transfers involving an owned wallet
+    const relevant = transfers.filter(
+        (t) => owned.has(normalizeAddress(t.from)) || owned.has(normalizeAddress(t.to))
+    );
 
     const sent = relevant.filter((t) => t.bucket === "SENT" || t.bucket === "BURNED");
     const received = relevant.filter((t) => t.bucket === "RECEIVED" || t.bucket === "MINTED");
@@ -287,14 +297,6 @@ export function classifyTransaction(
         }
     } else {
         category = "UNKNOWN";
-    }
-
-    // Check for stablecoin-only swaps (still taxable in US but worth noting)
-    if (category === "SWAP") {
-        const allStable = [...sent, ...received].every((t) => isStablecoin(tx.chain, t.token.contractAddress));
-        if (allStable) {
-            // Still a SWAP but the gains should be minimal
-        }
     }
 
     applyTreatments(transfers, category);

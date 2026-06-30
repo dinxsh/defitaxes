@@ -113,9 +113,10 @@ export interface TaxReport {
     zeroRateTransferCount: number;
     /** ISO 4217 currency code all monetary values are denominated in (e.g. "USD", "EUR") */
     currency: string;
-    /** Number of wash-sale events detected */
+    /** Number of wash-sale events detected (advisory flag only) */
     washSaleCount: number;
-    /** Total disallowed loss from wash-sale events */
+    /** Total loss flagged by wash-sale detection. Advisory: not actually disallowed — crypto is
+     *  not subject to IRC §1091 under current US law, so these losses remain deductible. */
     washSaleDisallowedLoss: number;
     /** Number of transactions that could not be classified (category === "UNKNOWN") */
     unknownTxCount: number;

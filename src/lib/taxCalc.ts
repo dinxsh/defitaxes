@@ -11,7 +11,18 @@ import type {
 } from "./types";
 
 const MS_PER_DAY = 86400000;
-const LONG_TERM_DAYS = 365;
+
+/**
+ * IRS holding period: an asset is LONG-TERM only if held *more than one year*.
+ * The holding period begins the day after acquisition, so the asset must be held at
+ * least "a year and a day". Using a calendar-based +1-year comparison (rather than a
+ * fixed 365-day threshold) keeps the boundary correct across leap years.
+ */
+function isLongTerm(acquired: Date, sold: Date): boolean {
+    const oneYearAfter = new Date(acquired);
+    oneYearAfter.setFullYear(oneYearAfter.getFullYear() + 1);
+    return sold.getTime() > oneYearAfter.getTime();
+}
 
 /**
  * Pick the lot index to consume for a given disposal method.
@@ -42,10 +53,16 @@ function collapseToAcb(queue: AcquisitionLot[]): void {
     const totalAmount = queue.reduce((s, l) => s + l.amount, 0);
     const totalCost = queue.reduce((s, l) => s + l.amount * l.costBasisPerUnit, 0);
     const avg = totalAmount > 0 ? totalCost / totalAmount : 0;
-    // Keep the earliest date for holding period purposes
-    const earliest = queue.reduce((a, b) => (a.date < b.date ? a : b));
+    // Use the amount-weighted average acquisition date for holding-period purposes.
+    // (Keeping only the earliest date would skew every pooled lot toward long-term.)
+    const weightedTime =
+        totalAmount > 0
+            ? queue.reduce((s, l) => s + l.date.getTime() * l.amount, 0) / totalAmount
+            : queue[0]!.date.getTime();
+    const base = queue[0]!;
     queue.splice(0, queue.length, {
-        ...earliest,
+        ...base,
+        date: new Date(weightedTime),
         amount: totalAmount,
         costBasisPerUnit: avg,
     });
@@ -109,7 +126,10 @@ export function calculateTaxes(
         if (tx.gasFeesUsd > 0) {
             const eligible = tx.transfers
                 .map((t, i) => ({ t, i }))
-                .filter(({ t }) => t.treatment === "sell" || t.treatment === "buy");
+                // buy/sell/fee are the treatments that create tax events (acquisitions and
+                // disposals); gas is pro-rated across exactly those, matching the disposal branch
+                // below which treats "sell" and "fee" identically.
+                .filter(({ t }) => t.treatment === "sell" || t.treatment === "buy" || t.treatment === "fee");
             const totalValue = eligible.reduce((s, { t }) => s + t.amount * t.rate, 0);
             if (totalValue > 0) {
                 for (const { t, i } of eligible) {
@@ -157,7 +177,10 @@ export function calculateTaxes(
                 // Disposal — lot-method match, reduce proceeds by allocated gas
                 let remaining = transfer.amount;
                 const grossProceeds = transfer.amount * transfer.rate;
-                const netProceeds = grossProceeds - gasForThis;
+                // Clamp at 0: if allocated gas exceeds gross proceeds, net proceeds shouldn't
+                // go negative (which would overstate the loss). The full gas is still captured
+                // in totalFees regardless.
+                const netProceeds = Math.max(0, grossProceeds - gasForThis);
                 const queue = lots.get(tokenKey) ?? [];
 
                 // ACB: collapse all lots to a single weighted-average lot before matching
@@ -170,8 +193,7 @@ export function calculateTaxes(
                     const costBasis = matched * lot.costBasisPerUnit;
                     const matchedProceeds = (matched / transfer.amount) * netProceeds;
 
-                    const holdingDays = (tx.timestamp.getTime() - lot.date.getTime()) / MS_PER_DAY;
-                    const holdingPeriod = holdingDays > LONG_TERM_DAYS ? "long-term" : "short-term";
+                    const holdingPeriod = isLongTerm(lot.date, tx.timestamp) ? "long-term" : "short-term";
 
                     const displaySymbol = getCanonicalSymbol(baseKey) ?? transfer.token.symbol;
                     const tokenLabel = transfer.token.tokenId
@@ -265,7 +287,9 @@ export function calculateTaxes(
         });
     }
 
-    // Wash-sale scan (IRC §1091): flag loss events where same token re-acquired within ±30 days
+    // Wash-sale scan (advisory): flag loss events where the same token is re-acquired within ±30
+    // days. This is informational only — crypto is property, not a security, so IRC §1091 does not
+    // currently apply and the loss is NOT disallowed in the totals below.
     const WASH_WINDOW_MS = 30 * MS_PER_DAY;
     let washSaleCount = 0;
     let washSaleDisallowedLoss = 0;

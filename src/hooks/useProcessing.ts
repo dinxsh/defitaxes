@@ -48,6 +48,14 @@ export function useProcessing(client: GoldRushClient): UseProcessingResult {
 
             try {
                 const allRawTx: Transaction[] = [];
+                // Dedup key (chain:hash): a transaction that moves value between two of the
+                // user's own wallets is returned by BOTH wallets' fetches. Without dedup it
+                // would be ingested twice — double-counting gas and producing a phantom
+                // disposal/acquisition pair. Keep the first occurrence.
+                const seenTxKeys = new Set<string>();
+                // All wallet addresses the user owns, lowercased — used so inter-wallet
+                // transfers classify as SELF (non-taxable) rather than sell + buy.
+                const ownedAddresses = new Set(wallets.map((w) => w.trim().toLowerCase()));
                 let totalFetched = 0;
                 const allActiveChainSet = new Set<string>();
                 // spam contract addresses per chain, populated from balances_v2 is_spam field
@@ -165,6 +173,9 @@ export function useProcessing(client: GoldRushClient): UseProcessingResult {
                             for (const item of items) {
                                 const tx = parseTransaction(item, chainName, wallet);
                                 if (tx) {
+                                    const txKey = `${chainName}:${tx.hash}`;
+                                    if (seenTxKeys.has(txKey)) continue;
+                                    seenTxKeys.add(txKey);
                                     tx.walletAddress = wallet.toLowerCase();
                                     allRawTx.push(tx);
                                 }
@@ -199,8 +210,9 @@ export function useProcessing(client: GoldRushClient): UseProcessingResult {
                 // Step 4: Classify
                 updateState({ step: "classifying", progress: "Classifying transactions..." });
                 for (const tx of allRawTx) {
-                    const walletAddr = tx.walletAddress ?? wallets[0]!;
-                    const result = classifyTransaction(tx, walletAddr);
+                    // Pass the full owned-address set so transfers between the user's own
+                    // wallets are treated as non-taxable SELF moves.
+                    const result = classifyTransaction(tx, ownedAddresses);
                     let category = result.category;
                     const classifiedTransfers = result.transfers;
 

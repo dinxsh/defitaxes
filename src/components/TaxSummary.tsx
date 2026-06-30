@@ -107,8 +107,9 @@ export function TaxSummary({ report, onShowZeroRate, onShowUnknown }: TaxSummary
                     </strong>
                     <span>
                         {" "}
-                        — {fmt(report.washSaleDisallowedLoss)} in losses may be disallowed under IRC §1091 (same token
-                        re-acquired within 30 days of sale). These are flagged with "W" in Form 8949 exports. Consult a
+                        — {fmt(report.washSaleDisallowedLoss)} in losses flagged (same token re-acquired within 30 days
+                        of sale). Advisory only: under current US law crypto is treated as property, not a security, so
+                        IRC §1091 wash-sale rules generally do not apply and these losses remain deductible. Consult a
                         tax professional.
                     </span>
                 </div>
